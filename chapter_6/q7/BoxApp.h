@@ -9,8 +9,8 @@
 
 struct Vertex
 {
-	DirectX::XMFLOAT3 Pos;
-	DirectX::XMFLOAT4 Color;
+    DirectX::XMFLOAT3 Pos;
+    DirectX::XMFLOAT4 Color;
 };
 
 struct ObjectConstants
@@ -62,6 +62,7 @@ private:
 
     Microsoft::WRL::ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
 
+	uint32_t mPyramidCBHeapIndex = -1;
     uint32_t mBoxCBHeapIndex = -1;
     std::unique_ptr<UploadBuffer<ObjectConstants>> mObjectCB = nullptr;
 
@@ -77,6 +78,9 @@ private:
 
     Microsoft::WRL::ComPtr<ID3D12PipelineState> mSolidPSO = nullptr;
     Microsoft::WRL::ComPtr<ID3D12PipelineState> mWireframePSO = nullptr;
+
+	DirectX::XMFLOAT4X4 mPyramidWorld = MathHelper::Identity4x4();
+	DirectX::XMFLOAT4X4 mBoxWorld = MathHelper::Identity4x4();
 
     DirectX::XMFLOAT4X4 mWorld = MathHelper::Identity4x4();
     DirectX::XMFLOAT4X4 mView = MathHelper::Identity4x4();

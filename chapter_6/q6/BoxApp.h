@@ -7,15 +7,11 @@
 #include "../../Common/DescriptorUtil.h"
 #include "../../Common/Camera.h"
 
-struct Vertex
-{
-	DirectX::XMFLOAT3 Pos;
-	DirectX::XMFLOAT4 Color;
-};
 
 struct ObjectConstants
 {
     DirectX::XMFLOAT4X4 World = MathHelper::Identity4x4();
+    float gTime = 0.0f;
 };
 
 struct PassConstants
@@ -68,7 +64,7 @@ private:
     uint32_t mPassCBHeapIndex = -1;
     std::unique_ptr<UploadBuffer<PassConstants>> mPassCB = nullptr;
 
-    std::unique_ptr<MeshGeometry> mGeo = nullptr;
+    std::unique_ptr<MeshGeometry> mBoxGeo = nullptr;
 
     Microsoft::WRL::ComPtr<IDxcBlob> mvsByteCode = nullptr;
     Microsoft::WRL::ComPtr<IDxcBlob> mpsByteCode = nullptr;
@@ -82,8 +78,8 @@ private:
     DirectX::XMFLOAT4X4 mView = MathHelper::Identity4x4();
     DirectX::XMFLOAT4X4 mProj = MathHelper::Identity4x4();
 
-    float mTheta = 1.25f * DirectX::XM_PI;
-    float mPhi = 0.25f * DirectX::XM_PI;
+    float mTheta = 1.25f*DirectX::XM_PI;
+    float mPhi = 0.25f*DirectX::XM_PI;
     float mRadius = 5.0f;
 
     POINT mLastMousePos;

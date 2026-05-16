@@ -68,8 +68,6 @@ private:
     uint32_t mPassCBHeapIndex = -1;
     std::unique_ptr<UploadBuffer<PassConstants>> mPassCB = nullptr;
 
-	// We are going to use two vertex buffers, one for position and one for color, 
-    // so we need to create a new struct that extends MeshGeometry to hold the second vertex buffer.
     std::unique_ptr<MeshGeometry> mGeo = nullptr;
 
     Microsoft::WRL::ComPtr<IDxcBlob> mvsByteCode = nullptr;
