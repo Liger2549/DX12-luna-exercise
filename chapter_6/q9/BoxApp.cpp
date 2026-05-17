@@ -106,17 +106,17 @@ void BoxApp::Update(const GameTimer& gt)
     XMMATRIX viewProj = view * proj;
 
     // Update the per-object buffer with the latest world matrix.
-	// Pyramid is at the left, so we need to apply a translation to it.
-    ObjectConstants pyramidConstants;
-	XMMATRIX pyramidWorld = XMMatrixTranslation(-3.0f, 0.0f, 0.0f);
-    XMStoreFloat4x4(&pyramidConstants.World, XMMatrixTranspose(pyramidWorld));
-	mObjectCB->CopyData(0, pyramidConstants); // we are only using one constant buffer element for the pyramid, so the element index is 0.
-
-	// Box is at the right, so we need to apply a translation to it.
-	ObjectConstants boxConstants;
-	XMMATRIX boxWorld = XMMatrixTranslation(3.0f, 0.0f, 0.0f);
-	XMStoreFloat4x4(&boxConstants.World, XMMatrixTranspose(boxWorld));
-	mObjectCB->CopyData(1, boxConstants); // we are only using one constant buffer element for the box, so the element index is 1.
+    for (int i = 0; i < 3; i++)
+    {
+		for (int j = 0; j < 3; j++)
+		{
+			int index = i * 3 + j;
+			ObjectConstants boxConstants;
+			XMMATRIX boxWorld = XMMatrixTranslation(-5.0f + j * 5.0f, 0.0f, -5.0f + i * 5.0f);
+			XMStoreFloat4x4(&boxConstants.World, XMMatrixTranspose(boxWorld));
+			mObjectCB->CopyData(index, boxConstants);
+		}
+    }
 
     // Update the per-pass buffer with the latest viewProj matrix.
     PassConstants passConstants;
@@ -163,38 +163,24 @@ void BoxApp::Draw(const GameTimer& gt)
         cbvSrvUavHeap.GpuHandle(mPassCBHeapIndex));
 
     mCommandList->IASetVertexBuffers(0, 1, &mGeo->VertexBufferView());
-    // WIth indices
     mCommandList->IASetIndexBuffer(&mGeo->IndexBufferView());
     mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    // Without indices
-    //mCommandList->DrawInstanced(mGeo->DrawArgs["triangle"].VertexCount, 1, 0, 0);
-
-	// bind pyramid CBV
-    mCommandList->SetGraphicsRootDescriptorTable(
-        ROOT_ARG_OBJECT_CBV,
-        cbvSrvUavHeap.GpuHandle(mPyramidCBHeapIndex));
-	
-    // draw the pyramid geometry
-    mCommandList->DrawIndexedInstanced(
-        mGeo->DrawArgs["Pyramid"].IndexCount,
-        1,  // instanceCount
-        mGeo->DrawArgs["Pyramid"].StartIndexLocation,
-        mGeo->DrawArgs["Pyramid"].BaseVertexLocation,
-        0); // startInstanceLocation
-
     // bind box CBV
-    mCommandList->SetGraphicsRootDescriptorTable(
-        ROOT_ARG_OBJECT_CBV,
-        cbvSrvUavHeap.GpuHandle(mBoxCBHeapIndex));
-	
-    // draw the box geometry
-    mCommandList->DrawIndexedInstanced(
-        mGeo->DrawArgs["Box"].IndexCount,
-        1,  // instanceCount
-        mGeo->DrawArgs["Box"].StartIndexLocation,
-        mGeo->DrawArgs["Box"].BaseVertexLocation,
-        0); // startInstanceLocation
+	for (int i = 0; i < 9; i++)
+	{
+		mCommandList->SetGraphicsRootDescriptorTable(
+			ROOT_ARG_OBJECT_CBV,
+			cbvSrvUavHeap.GpuHandle(mBoxCBHeapIndex[i]));
+        // draw the box geometry
+        mCommandList->DrawIndexedInstanced(
+            mGeo->DrawArgs["Box"].IndexCount,
+            1,  // instanceCount
+            mGeo->DrawArgs["Box"].StartIndexLocation,
+            mGeo->DrawArgs["Box"].BaseVertexLocation,
+            0); // startInstanceLocation
+
+	}	
 
     // Draw imgui UI.
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), mCommandList.Get());
@@ -348,11 +334,14 @@ void BoxApp::BuildConstantBuffers()
 {
     CbvSrvUavHeap& cbvSrvUavHeap = CbvSrvUavHeap::Get();
 
-	mPyramidCBHeapIndex = cbvSrvUavHeap.NextFreeIndex();
-    mBoxCBHeapIndex = cbvSrvUavHeap.NextFreeIndex();
+    for (int i = 0; i < 9; i++)
+    {
+        mBoxCBHeapIndex[i] = cbvSrvUavHeap.NextFreeIndex();
+
+    }
     mPassCBHeapIndex = cbvSrvUavHeap.NextFreeIndex();
 
-    const UINT elementCount = 2;
+    const UINT elementCount = 9;
     const bool isConstantBuffer = true;
 
     mObjectCB = std::make_unique<UploadBuffer<ObjectConstants>>(
@@ -370,28 +359,20 @@ void BoxApp::BuildConstantBuffers()
     UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
     UINT passCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(PassConstants));
 
-    // Pyramid CBV - element 0
-    D3D12_GPU_VIRTUAL_ADDRESS pyramidCBAddress =
-        mObjectCB->Resource()->GetGPUVirtualAddress() +
-        0 * objCBByteSize;
-
-    D3D12_CONSTANT_BUFFER_VIEW_DESC cbvPyramidDesc;
-    cbvPyramidDesc.BufferLocation = pyramidCBAddress;
-    cbvPyramidDesc.SizeInBytes = objCBByteSize;
-    md3dDevice->CreateConstantBufferView(
-        &cbvPyramidDesc,
-        cbvSrvUavHeap.CpuHandle(mPyramidCBHeapIndex));
-
-    // Box CBV - element 1
-    D3D12_GPU_VIRTUAL_ADDRESS boxCBAddress =
-        mObjectCB->Resource()->GetGPUVirtualAddress() +
-        1 * objCBByteSize;
-    D3D12_CONSTANT_BUFFER_VIEW_DESC cbvBoxDesc;
-    cbvBoxDesc.BufferLocation = boxCBAddress;
-    cbvBoxDesc.SizeInBytes = objCBByteSize;
-    md3dDevice->CreateConstantBufferView(
-        &cbvBoxDesc,
-        cbvSrvUavHeap.CpuHandle(mBoxCBHeapIndex));
+    // Box CBV
+	std::vector<D3D12_GPU_VIRTUAL_ADDRESS> boxCBAddress(elementCount);
+	std::vector<D3D12_CONSTANT_BUFFER_VIEW_DESC> cbvBoxDesc(elementCount);
+    for (int i = 0; i < elementCount; i++)
+    {
+        boxCBAddress[i] =
+            mObjectCB->Resource()->GetGPUVirtualAddress() +
+            i * objCBByteSize;
+        cbvBoxDesc[i].BufferLocation = boxCBAddress[i];
+        cbvBoxDesc[i].SizeInBytes = objCBByteSize;
+        md3dDevice->CreateConstantBufferView(
+            &cbvBoxDesc[i],
+            cbvSrvUavHeap.CpuHandle(mBoxCBHeapIndex[i]));
+    }
 
 	// Pass CBV - element 0
     D3D12_GPU_VIRTUAL_ADDRESS passCBAddress =
@@ -495,37 +476,12 @@ void BoxApp::BuildBoxGeometry(ID3D12Device* device, DirectX::ResourceUploadBatch
 	Vertex vb6 = { XMFLOAT3(-1.0f, +1.0f, +1.0f), XMFLOAT4(Colors::Yellow) };
 	Vertex vb7 = { XMFLOAT3(+1.0f, +1.0f, +1.0f), XMFLOAT4(Colors::Cyan) };
 	Vertex vb8 = { XMFLOAT3(+1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Magenta) };
-
-    // Pyramid
-    Vertex vp1 = { XMFLOAT3(+1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Green) }; // 0 : Right Bottom Back
-    Vertex vp2 = { XMFLOAT3(+1.0f, -1.0f, -1.0f), XMFLOAT4(Colors::Green) }; // 1 : Right Bottom Front
-    Vertex vp3 = { XMFLOAT3(-1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Green) }; // 2 : Left Bottom Back
-    Vertex vp4 = { XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT4(Colors::Green) }; // 3 : Left Bottom Front
-    Vertex vp5 = { XMFLOAT3(0.0f,  1.0f, 0.0f), XMFLOAT4(Colors::Red) };   // 4 : tip vertex
-
-    std::array<Vertex, 5> verticesPyramid =
-    {
-		vp1, vp2, vp3, vp4, vp5
-    };
-
-	std::array<Vertex, 8> verticesBox =
+	std::array<Vertex, 8> vertices =
 	{
 		vb1, vb2, vb3, vb4, vb5, vb6, vb7, vb8
 	};
 
-    std::array<std::uint16_t, 18> indicesPyramid = {
-        // Base
-        0, 2, 1,    // v1, v3, v2
-        1, 2, 3,    // v2, v3, v4
-
-        // Side faces
-        0, 1, 4,    // v1, v2, v5
-        1, 3, 4,    // v2, v4, v5
-        3, 2, 4,    // v4, v3, v5
-        2, 0, 4     // v3, v1, v5
-    };
-
-	std::array<std::uint16_t, 36> indicesBox = {
+	std::array<std::uint16_t, 36> indices = {
 		// Front face
 		0, 1, 2,
 		0, 2, 3,
@@ -551,67 +507,48 @@ void BoxApp::BuildBoxGeometry(ID3D12Device* device, DirectX::ResourceUploadBatch
 		4, 3, 7
 	};
 
-    std::vector<Vertex> allVertices;
-    allVertices.insert(allVertices.end(), verticesPyramid.begin(), verticesPyramid.end());
-    allVertices.insert(allVertices.end(), verticesBox.begin(), verticesBox.end());
-
-    std::vector<std::uint16_t> allIndices;
-    allIndices.insert(allIndices.end(), indicesPyramid.begin(), indicesPyramid.end());
-    allIndices.insert(allIndices.end(), indicesBox.begin(), indicesBox.end());
-
-    // All geo
-    const UINT vbByteSize = (UINT)allVertices.size() * sizeof(Vertex);
-    const UINT ibByteSize = (UINT)allIndices.size() * sizeof(std::uint16_t);
+    // Box geo
+    const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
+    const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
 
     mGeo = std::make_unique<MeshGeometry>();
-    mGeo->Name = "MergedGeo";
+    mGeo->Name = "BoxGeo";
 
     mGeo->VertexBufferCPU.resize(vbByteSize);
-    CopyMemory(mGeo->VertexBufferCPU.data(), allVertices.data(), vbByteSize);
+    CopyMemory(mGeo->VertexBufferCPU.data(), vertices.data(), vbByteSize);
 
     CreateStaticBuffer(
         device, uploadBatch,
-        allVertices.data(), allVertices.size(), sizeof(Vertex),
+        vertices.data(), (UINT)vertices.size(), sizeof(Vertex),
         D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER,
         &mGeo->VertexBufferGPU);
     mGeo->VertexByteStride = sizeof(Vertex);
     mGeo->VertexBufferByteSize = vbByteSize;
 
-    // All indices
+    // Box indices
     mGeo->IndexBufferCPU.resize(ibByteSize);
-    CopyMemory(mGeo->IndexBufferCPU.data(), allIndices.data(), ibByteSize);
+    CopyMemory(mGeo->IndexBufferCPU.data(), indices.data(), ibByteSize);
     CreateStaticBuffer(
         device, uploadBatch,
-        allIndices.data(), allIndices.size(), sizeof(std::uint16_t),
+        indices.data(), (UINT)indices.size(), sizeof(std::uint16_t),
         D3D12_RESOURCE_STATE_INDEX_BUFFER,
         &mGeo->IndexBufferGPU);
     mGeo->IndexFormat = DXGI_FORMAT_R16_UINT;
     mGeo->IndexBufferByteSize = ibByteSize;
 
-    SubmeshGeometry submeshPyramid;
-    submeshPyramid.IndexCount = (UINT)indicesPyramid.size();
-    submeshPyramid.StartIndexLocation = 0;
-    submeshPyramid.BaseVertexLocation = 0;
-    submeshPyramid.VertexCount = (UINT)verticesPyramid.size();
-
-	SubmeshGeometry submeshBox;
-	submeshBox.IndexCount = (UINT)indicesBox.size();
-	submeshBox.StartIndexLocation = submeshPyramid.IndexCount;
-	submeshBox.BaseVertexLocation = submeshPyramid.VertexCount;
-	submeshBox.VertexCount = (UINT)verticesBox.size();
+	SubmeshGeometry submesh;
+	submesh.IndexCount = (UINT)indices.size();
+	submesh.StartIndexLocation = 0;
+	submesh.BaseVertexLocation = 0;
+	submesh.VertexCount = (UINT)vertices.size();
 
     // Box that tightly contains all the geometry. This 
     // is used in later chapters of the book.
-    submeshPyramid.Bounds = BoundingBox(
+    submesh.Bounds = BoundingBox(
         XMFLOAT3(0.0f, 0.0f, 0.0f),  // center
         XMFLOAT3(1.0f, 1.0f, 1.0f)); // extents
 
-    submeshBox.Bounds = BoundingBox(
-        XMFLOAT3(0.0f, 0.0f, 0.0f),  // center
-        XMFLOAT3(1.0f, 1.0f, 1.0f)); // extents
-
-    mGeo->DrawArgs["Pyramid"] = submeshPyramid;
-    mGeo->DrawArgs["Box"] = submeshBox;
+    mGeo->DrawArgs["Box"] = submesh;
 }
 
 void BoxApp::BuildPSO()
@@ -623,6 +560,7 @@ void BoxApp::BuildPSO()
         mRootSignature.Get(),
         mvsByteCode.Get(), mpsByteCode.Get());
 
+	basePsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE; // so we can see the back faces of the box in solid mode
     ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(
         &basePsoDesc,
         IID_PPV_ARGS(&mSolidPSO)));
@@ -630,6 +568,8 @@ void BoxApp::BuildPSO()
     // Create a new PSO based off the default PSO:
     D3D12_GRAPHICS_PIPELINE_STATE_DESC wireframePsoDesc = basePsoDesc;
     wireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
+	//wireframePsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE; // so we can see the back faces of the wireframe box
+	wireframePsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_FRONT; // cull front faces so we can see the back faces of the wireframe box
 
     ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(
         &wireframePsoDesc,
